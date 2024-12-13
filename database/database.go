@@ -34,21 +34,21 @@ func Connect(dbURL string) (*sql.DB, error) {
 	return db, nil
 }
 
-func GetUserByToken(db *sql.DB, encodedToken string) (*models.User, error) {
+func GetUserByToken(db *sql.DB, encodedToken string) (*models.User, *time.Time, error) {
 	log.Printf("[DEBUG] Looking up user by token")
 
 	// Decode base64 token
 	tokenBytes, err := base64.StdEncoding.DecodeString(encodedToken)
 	if err != nil {
 		log.Printf("[ERROR] Invalid token encoding")
-		return nil, fmt.Errorf("invalid token encoding")
+		return nil, nil, fmt.Errorf("invalid token encoding")
 	}
 
 	// Split decoded token into components
 	parts := strings.Split(string(tokenBytes), ":")
 	if len(parts) != 2 {
 		log.Printf("[ERROR] Invalid token format")
-		return nil, fmt.Errorf("invalid token format")
+		return nil, nil, fmt.Errorf("invalid token format")
 	}
 
 	tokenID := parts[0]
@@ -57,29 +57,29 @@ func GetUserByToken(db *sql.DB, encodedToken string) (*models.User, error) {
 	var user models.User
 	var rolesStr string
 	var hashedToken string
-
+	var expiresAt time.Time
 	// Get user and hashed token
 	err = db.QueryRow(`
-		SELECT u.id, u.username, u.roles, u.created_at, ut.token
+		SELECT u.id, u.username, u.roles, u.created_at, ut.token, ut.expires_at
 		FROM users u
 		JOIN user_tokens ut ON u.id = ut.user_id
 		WHERE ut.id = $1 AND ut.expires_at > $2
-	`, tokenID, time.Now()).Scan(&user.ID, &user.Username, &rolesStr, &user.CreatedAt, &hashedToken)
+	`, tokenID, time.Now()).Scan(&user.ID, &user.Username, &rolesStr, &user.CreatedAt, &hashedToken, &expiresAt)
 
 	if err != nil {
 		log.Printf("[ERROR] Failed to get user by token: %v", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Verify token
 	if err := bcrypt.CompareHashAndPassword([]byte(hashedToken), []byte(rawToken)); err != nil {
 		log.Printf("[ERROR] Invalid token hash")
-		return nil, fmt.Errorf("invalid token")
+		return nil, nil, fmt.Errorf("invalid token")
 	}
 
 	log.Printf("[DEBUG] Found user %s with token", user.Username)
 	user.Roles = parseRoles(rolesStr)
-	return &user, nil
+	return &user, &expiresAt, nil
 }
 
 func parseRoles(rolesStr string) []string {

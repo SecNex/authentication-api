@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/secnex/authentication-api/database"
@@ -38,7 +39,7 @@ func (h *Handler) ValidateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := database.GetUserByToken(h.db, token)
+	user, expiresAt, err := database.GetUserByToken(h.db, token)
 	if err != nil {
 		log.Printf("[ERROR] Invalid token from %s: %v", r.RemoteAddr, err)
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
@@ -46,8 +47,12 @@ func (h *Handler) ValidateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[DEBUG] Successfully validated token for user %s", user.Username)
+	// Difference in seconds between now and expiresAt - only return seconds until expiration
+	diff := time.Until(*expiresAt).Seconds()
+	diffInt := int(diff)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"user": user,
+		"exp":  diffInt,
 	})
 }
 

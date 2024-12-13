@@ -1,5 +1,7 @@
 # SecNex Authentication API
 
+This is a simple authentication API for all SecNex services. It is built using Go and PostgreSQL.
+
 ## Development
 
 1. Create a `.env` file based on `.env.example` and populate with your values.
